@@ -4,7 +4,7 @@ A minimal, browser-based marketplace for fictional K-pop releases.
 
 ## Current features
 - Email/password accounts through Firebase Authentication.
-- Usernames, display names and preset profile icons.
+- Usernames, display names and uploaded profile pictures.
 - Browser-persistent login sessions.
 - Create, edit, publish and delete albums, EPs, singles and mixtapes.
 - Add track titles and original-artist credits.
@@ -21,7 +21,7 @@ A minimal, browser-based marketplace for fictional K-pop releases.
 The Firebase web configuration is in `index.html`. It is intended for client-side use; access control is enforced by Firestore Security Rules.
 
 ## Notes
-- Profile images currently use preset icons. No Firebase Storage or paid services are used.
-- Cover art is linked using an image URL; uploads are not enabled.
+- Profile pictures and release cover art can be uploaded directly from a device. Images are resized and compressed in the browser, then stored in Firestore. No Firebase Storage or paid services are used.
+- Uploads are limited to 10 MB source files; the app compresses profile pictures to a small thumbnail and cover art to a maximum of 1000 px before saving.
 - Spotify linking is not included in this first foundation build.
 - No Cloud Functions are required.

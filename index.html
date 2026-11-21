@@ -149,8 +149,8 @@
             const username=form.username.value.trim().toLowerCase();
             if(!/^[a-z0-9_]{3,20}$/.test(username)) throw new Error("Username must be 3–20 characters using letters, numbers or underscores.");
             const displayName=form.displayName.value.trim(); if(!displayName) throw new Error("Please enter a display name.");
-            const credential=await createUserWithEmailAndPassword(auth,email,password);
             const avatarData=await compressImage(form.profilePicture.files[0],320,180000);
+            const credential=await createUserWithEmailAndPassword(auth,email,password);
             const profile={uid:credential.user.uid,username,displayName,avatarUrl:"",avatarData,createdAt:serverTimestamp()};
             try {
               await runTransaction(db,async transaction=>{
@@ -204,7 +204,7 @@
       try{
         const tracks=[...form.querySelectorAll(".track-row")].map(row=>({title:row.querySelector(".track-title-input").value.trim(),credit:row.querySelector(".track-credit-input").value.trim()})).filter(t=>t.title);
         if(!tracks.length)throw new Error("Add at least one track to your release.");
-        const data={title:form.releaseTitle.value.trim(),artist:form.artistName.value.trim(),type:form.releaseType.value,releaseDate:form.releaseDate.value,coverUrl:"",coverData:form.coverFile.files[0]?await compressImage(form.coverFile.files[0],1000,420000):(editingReleaseData?.coverData||""),description:form.description.value.trim(),tracks,published:form.publishRelease.checked,ownerId:currentUser.uid,ownerName:currentProfile.displayName||currentProfile.username,updatedAt:serverTimestamp()};
+        const data={title:form.releaseTitle.value.trim(),artist:form.artistName.value.trim(),type:form.releaseType.value,releaseDate:form.releaseDate.value,coverUrl:form.coverFile.files[0]?"":(editingReleaseData?.coverUrl||""),coverData:form.coverFile.files[0]?await compressImage(form.coverFile.files[0],1000,420000):(editingReleaseData?.coverData||""),description:form.description.value.trim(),tracks,published:form.publishRelease.checked,ownerId:currentUser.uid,ownerName:currentProfile.displayName||currentProfile.username,updatedAt:serverTimestamp()};
         if(editingReleaseId){await updateDoc(doc(db,"releases",editingReleaseId),data);}
         else{data.createdAt=serverTimestamp();await setDoc(doc(collection(db,"releases")),data);}
         await loadLibrary();

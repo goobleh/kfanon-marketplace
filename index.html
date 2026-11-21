@@ -11,7 +11,7 @@
     .topbar{height:64px;border-bottom:1px solid #e9e9e9;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100vw - 1120px)/2));position:sticky;top:0;background:#fff;z-index:5}
     .brand{font-weight:750;letter-spacing:-.6px;font-size:18px;cursor:pointer}.brand span{font-weight:400;color:#777}
     .nav{display:flex;align-items:center;gap:24px}.nav button,.link-btn{border:0;background:none;color:#555;padding:8px 0;font-size:14px}.nav button.active{color:#111;font-weight:650}
-    .account-actions{display:flex;align-items:center;gap:12px}.button{border:1px solid #dedede;background:#fff;color:#171717;padding:10px 15px;border-radius:7px;font-size:14px;font-weight:600}.button:hover{background:#f7f7f7}.button.primary{background:#171717;color:#fff;border-color:#171717}.button.primary:hover{background:#333}.button:disabled{opacity:.5;cursor:not-allowed}
+    .account-actions{display:flex;align-items:center;gap:12px}.account-status{display:flex;align-items:center;gap:8px;font-size:12px;color:#237a45;font-weight:650;white-space:nowrap}.account-status:before{content:"";width:7px;height:7px;border-radius:50%;background:#269653;display:inline-block}.button{border:1px solid #dedede;background:#fff;color:#171717;padding:10px 15px;border-radius:7px;font-size:14px;font-weight:600}.button:hover{background:#f7f7f7}.button.primary{background:#171717;color:#fff;border-color:#171717}.button.primary:hover{background:#333}.button:disabled{opacity:.5;cursor:not-allowed}
     .avatar{width:34px;height:34px;border-radius:50%;background:#f1f1f1;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #e8e8e8;flex:none}.avatar img{width:100%;height:100%;object-fit:cover}
     main{max-width:1120px;margin:0 auto;padding:48px 24px 80px}.hero{padding:28px 0 34px;border-bottom:1px solid #eee;margin-bottom:32px}.eyebrow{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#777;font-weight:700}.hero h1{font-size:clamp(34px,5vw,52px);letter-spacing:-2px;line-height:1.05;margin:14px 0 12px;font-weight:700}.hero p{color:#666;max-width:550px;line-height:1.65;margin:0;font-size:15px}
     .section-head{display:flex;justify-content:space-between;align-items:end;gap:16px;margin:0 0 20px}.section-head h2{font-size:21px;letter-spacing:-.5px;margin:0}.muted{color:#777;font-size:13px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px}.release{min-width:0;cursor:pointer}.cover{width:100%;aspect-ratio:1;background:#f2f2f2;border-radius:4px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:36px}.cover img{width:100%;height:100%;object-fit:cover}.release h3{font-size:15px;margin:11px 0 4px;font-weight:650;overflow-wrap:anywhere}.release .sub{font-size:13px;color:#777}.tag{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#777;margin-top:7px}
@@ -118,6 +118,7 @@
     function releaseCard(release) {
       return '<article class="release" data-release="'+escapeHtml(release.id)+'">'+coverMarkup(release)+'<h3>'+escapeHtml(release.title)+'</h3><div class="sub">'+escapeHtml(release.artist||"Unknown artist")+'</div><div class="tag">'+escapeHtml(release.type||"Album")+' · '+escapeHtml(release.tracks?.length||0)+' tracks</div></article>';
     }
+    function timestampValue(value){if(!value)return 0;if(typeof value.toMillis==="function")return value.toMillis();if(typeof value.seconds==="number")return value.seconds*1000;const parsed=new Date(value).getTime();return Number.isFinite(parsed)?parsed:0;}
     function bindCards() {
       document.querySelectorAll("[data-release]").forEach(card=>card.addEventListener("click",()=>openRelease(card.dataset.release)));
     }
@@ -127,8 +128,8 @@
       renderShell("", "", '<section class="hero"><div class="eyebrow">A home for fictional music</div><h1>Your next favourite<br>release starts here.</h1><p>Explore fan-made K-pop discographies, build fictional albums and EPs, and bring your artists to life.</p></section><div class="section-head"><h2>Recently published</h2><span class="muted" id="releaseCount"></span></div><div id="discoverGrid" class="grid"><div class="muted">Loading releases…</div></div>');
       document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page==="discover"));
       try {
-        const snap=await getDocs(query(collection(db,"releases"),where("published","==",true),orderBy("createdAt","desc"),limit(40)));
-        cachedReleases=snap.docs.map(d=>({id:d.id,...d.data()}));
+        const snap=await getDocs(query(collection(db,"releases"),where("published","==",true)));
+        cachedReleases=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(b.createdAt)-timestampValue(a.createdAt)).slice(0,40);
         document.getElementById("releaseCount").textContent=cachedReleases.length+" releases";
         document.getElementById("discoverGrid").innerHTML=cachedReleases.length?cachedReleases.map(releaseCard).join(""):'<div class="empty" style="grid-column:1/-1"><strong>Nothing here just yet.</strong>Be the first to publish a fictional release.</div>';
         bindCards();
@@ -170,12 +171,17 @@
     function closeModal(){modalRoot.innerHTML="";}
 
     function updateAccountUI() {
-      if(currentUser && currentProfile){
-        accountActions.innerHTML='<button class="link-btn" id="profileOpen">'+avatarMarkup(currentProfile.avatarUrl,currentProfile.displayName||currentProfile.username,currentProfile.avatarData)+' '+escapeHtml(currentProfile.displayName||currentProfile.username)+'</button><button class="button" id="logoutButton">Log out</button>';
-        document.getElementById("profileOpen").onclick=loadProfile;
+      if(currentUser){
+        const label=currentProfile?.displayName||currentUser.displayName||currentProfile?.username||currentUser.email||"Your account";
+        const profileControl=currentProfile
+          ? '<button class="link-btn" id="profileOpen">'+avatarMarkup(currentProfile.avatarUrl,label,currentProfile.avatarData)+' '+escapeHtml(label)+'</button>'
+          : '<span class="link-btn">'+escapeHtml(label)+'</span>';
+        accountActions.innerHTML='<span class="account-status">Signed in</span>'+profileControl+'<button class="button" id="logoutButton">Log out</button>';
+        const profileButton=document.getElementById("profileOpen");
+        if(profileButton)profileButton.onclick=loadProfile;
         document.getElementById("logoutButton").onclick=()=>signOut(auth);
       } else {
-        accountActions.innerHTML='<button class="button" id="loginOpen">Log in</button><button class="button primary" id="signupOpen">Sign up</button>';
+        accountActions.innerHTML='<span class="account-status" style="color:#777">Not signed in</span><button class="button" id="loginOpen">Log in</button><button class="button primary" id="signupOpen">Sign up</button>';
         document.getElementById("loginOpen").onclick=()=>openAuth("login");
         document.getElementById("signupOpen").onclick=()=>openAuth("signup");
       }
@@ -219,8 +225,8 @@
       document.querySelectorAll("[data-library-tab]").forEach(b=>b.onclick=()=>{libraryTab=b.dataset.libraryTab;loadLibrary();});
       if(libraryTab==="profile"){renderProfileSettings();return;}
       try{
-        const snap=await getDocs(query(collection(db,"releases"),where("ownerId","==",currentUser.uid),orderBy("updatedAt","desc")));
-        const releases=snap.docs.map(d=>({id:d.id,...d.data()}));
+        const snap=await getDocs(query(collection(db,"releases"),where("ownerId","==",currentUser.uid)));
+        const releases=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(b.updatedAt)-timestampValue(a.updatedAt));
         document.getElementById("libraryContent").innerHTML='<div class="section-head"><span class="muted">'+releases.length+' releases</span><button class="button primary" id="newRelease">Create release</button></div>'+(releases.length?'<div class="grid">'+releases.map(r=>'<div>'+releaseCard(r)+'<div class="muted" style="margin-top:7px;font-size:12px">'+(r.published?"Published":"Draft")+'</div></div>').join("")+'</div>':'<div class="empty"><strong>Your library is empty.</strong>Create your first album or EP to get started.</div>');
         document.getElementById("newRelease").onclick=()=>loadCreate();
         bindCards();
@@ -262,7 +268,9 @@
 
     onAuthStateChanged(auth,async user=>{
       currentUser=user;currentProfile=null;
-      if(user){try{const snap=await getDoc(doc(db,"users",user.uid));if(snap.exists())currentProfile=snap.data();}catch(error){console.error(error);}}
+      updateAccountUI();
+      if(user){try{const snap=await getDoc(doc(db,"users",user.uid));if(snap.exists())currentProfile=snap.data();else console.warn("Signed-in account has no matching Firestore profile.");}catch(error){console.error("Could not load account profile:",error);}}
+      if(auth.currentUser?.uid!==user?.uid)return;
       updateAccountUI();
       if(currentPage==="create")loadCreate();
       else if(currentPage==="library")loadLibrary();

@@ -221,7 +221,7 @@
       return '<article class="release">'+coverMarkup(release)+'<h3>'+escapeHtml(release.title)+'</h3><div class="release-meta"><div class="sub">'+escapeHtml(release.artist)+'</div><div class="tag">'+escapeHtml(release.type)+' · '+release.tracks.length+' tracks</div></div></article>';
     }
     function trackRow(track,index){return '<div class="track-row"><span class="track-num">'+(index+1)+'</span><input aria-label="Track '+(index+1)+' title" class="track-title-input" maxlength="100" placeholder="Track title" value="'+escapeHtml(track.title||"")+'" required><input aria-label="Track '+(index+1)+' credit" class="track-credit-input" maxlength="100" placeholder="Original artist (optional)" value="'+escapeHtml(track.credit||"")+'"><button class="icon-button" type="button" data-remove-track aria-label="Remove track">×</button></div>';}
-    function updateTrackRows(){const rows=[...document.querySelectorAll(".track-row")];rows.forEach((r,i)=>r.querySelector(".track-num").textContent=i+1);const count=document.getElementById("trackCount");if(count)count.textContent=rows.length+" tracks";}
+    function updateTrackRows(){const rows=[...document.querySelectorAll(".track-row")];rows.forEach((r,i)=>r.querySelector(".track-num").textContent=i+1);const count=document.getElementById("trackCount");if(count)count.textContent=rows.length+" tracks";updateReleasePreview();}
     async function saveRelease(e){
       e.preventDefault(); const form=e.currentTarget;const button=form.querySelector('button[type="submit"]');button.disabled=true;button.textContent="Saving…";
       try{

@@ -200,7 +200,7 @@
       try{
         const snap=await getDocs(query(collection(db,"releases"),where("ownerId","==",currentUser.uid),orderBy("updatedAt","desc")));
         const releases=snap.docs.map(d=>({id:d.id,...d.data()}));
-        document.getElementById("libraryContent").innerHTML='<div class="section-head"><span class="muted">'+releases.length+' releases</span><button class="button primary" id="newRelease">Create release</button></div>'+(releases.length?'<div class="grid">'+releases.map(r=>releaseCard(r)+'<div class="muted" style="margin-top:-10px;font-size:12px">'+(r.published?"Published":"Draft")+'</div>').join("")+'</div>':'<div class="empty"><strong>Your library is empty.</strong>Create your first album or EP to get started.</div>');
+        document.getElementById("libraryContent").innerHTML='<div class="section-head"><span class="muted">'+releases.length+' releases</span><button class="button primary" id="newRelease">Create release</button></div>'+(releases.length?'<div class="grid">'+releases.map(r=>'<div>'+releaseCard(r)+'<div class="muted" style="margin-top:7px;font-size:12px">'+(r.published?"Published":"Draft")+'</div></div>').join("")+'</div>':'<div class="empty"><strong>Your library is empty.</strong>Create your first album or EP to get started.</div>');
         document.getElementById("newRelease").onclick=()=>loadCreate();
         bindCards();
         document.querySelectorAll("[data-release]").forEach(card=>card.addEventListener("contextmenu",e=>e.preventDefault()));

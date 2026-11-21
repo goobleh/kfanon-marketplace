@@ -70,10 +70,28 @@
     let libraryTab = "releases";
     let cachedReleases = [];
     let editingReleaseId = null;
+    let editingReleaseData = null;
 
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
     const safeImageUrl = value => { try { const url=new URL(value); return url.protocol==="https:" ? url.href : ""; } catch { return ""; } };
-    const avatarMarkup = (url,label="Profile picture") => { const safe=safeImageUrl(url); return '<span class="avatar">'+(safe?'<img src="'+escapeHtml(safe)+'" alt="'+escapeHtml(label)+'" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>'; };
+    const imageSource = (data,url) => data || safeImageUrl(url);
+    async function compressImage(file,maxSide=800,maxChars=420000){
+      if(!file) return "";
+      if(!file.type.startsWith("image/")) throw new Error("Choose an image file.");
+      if(file.size>10*1024*1024) throw new Error("Choose an image smaller than 10 MB.");
+      const bitmap=await createImageBitmap(file);
+      const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+      const canvas=document.createElement("canvas");
+      canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+      canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+      canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);
+      bitmap.close();
+      let quality=.82,result=canvas.toDataURL("image/jpeg",quality);
+      while(result.length>maxChars && quality>.42){quality-=.08;result=canvas.toDataURL("image/jpeg",quality);}
+      if(result.length>maxChars) throw new Error("This image is too detailed to store. Try a smaller image.");
+      return result;
+    }
+    const avatarMarkup = (url,label="Profile picture",data="") => { const safe=imageSource(data,url); return '<span class="avatar">'+(safe?'<img src="'+escapeHtml(safe)+'" alt="'+escapeHtml(label)+'" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>'; };
     const dateLabel = value => value ? new Date(value).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}) : "Date not set";
     const showMessage = (text, type="error", target="formMessage") => { const node=document.getElementById(target); if(node){node.className=type;node.textContent=text;} };
     const friendlyError = error => {
@@ -94,7 +112,7 @@
       appRoot.innerHTML = (title ? '<h1 class="page-title">'+escapeHtml(title)+'</h1><p class="page-intro">'+escapeHtml(intro||"")+'</p>' : "") + content;
     }
     function coverMarkup(release, extraClass="") {
-      const url = release.coverUrl && /^https:\/\//i.test(release.coverUrl) ? release.coverUrl : "";
+      const url = imageSource(release.coverData,release.coverUrl);
       return '<div class="cover '+extraClass+'">'+(url ? '<img src="'+escapeHtml(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove();this.parentElement.textContent=\'♪\'">' : "♪")+'</div>';
     }
     function releaseCard(release) {
@@ -119,7 +137,7 @@
 
     function openAuth(mode="login") {
       const signup=mode==="signup";
-      modalRoot.innerHTML='<div class="modal-backdrop" id="modalBackdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle"><button class="modal-close" id="modalClose" aria-label="Close">×</button><h2 id="authTitle">'+(signup?"Create your account":"Welcome back")+'</h2><p>'+(signup?"Set up your K-Fanon Marketplace profile.":"Log in to continue to your marketplace.")+'</p><form id="authForm">'+(signup?'<div class="field"><label for="username">Username</label><input id="username" name="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" placeholder="yourusername" required><span class="hint">3–20 characters. Letters, numbers and underscores.</span></div><div class="field"><label for="displayName">Display name</label><input id="displayName" name="displayName" maxlength="32" placeholder="How should we know you?" required></div><div class="field"><label for="profilePicture">Profile picture URL</label><input id="profilePicture" type="url" placeholder="https://…" autocomplete="url"><span class="hint">Paste a direct HTTPS image link.</span></div>':"")+'<div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div><div class="field"><label for="password">Password</label><input id="password" name="password" type="password" minlength="6" autocomplete="'+(signup?"new-password":"current-password")+'" required></div><div id="formMessage" class="error" role="alert"></div><button class="button primary" style="width:100%" type="submit">'+(signup?"Create account":"Log in")+'</button></form><div class="modal-switch">'+(signup?'Already have an account? <button id="switchAuth">Log in</button>':'New here? <button id="switchAuth">Create an account</button>')+'</div></section></div>';
+      modalRoot.innerHTML='<div class="modal-backdrop" id="modalBackdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle"><button class="modal-close" id="modalClose" aria-label="Close">×</button><h2 id="authTitle">'+(signup?"Create your account":"Welcome back")+'</h2><p>'+(signup?"Set up your K-Fanon Marketplace profile.":"Log in to continue to your marketplace.")+'</p><form id="authForm">'+(signup?'<div class="field"><label for="username">Username</label><input id="username" name="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" placeholder="yourusername" required><span class="hint">3–20 characters. Letters, numbers and underscores.</span></div><div class="field"><label for="displayName">Display name</label><input id="displayName" name="displayName" maxlength="32" placeholder="How should we know you?" required></div><div class="field"><label for="profilePicture">Profile picture</label><input id="profilePicture" type="file" accept="image/*"><span class="hint">Choose an image from your device. It will be resized before saving.</span></div>':"")+'<div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div><div class="field"><label for="password">Password</label><input id="password" name="password" type="password" minlength="6" autocomplete="'+(signup?"new-password":"current-password")+'" required></div><div id="formMessage" class="error" role="alert"></div><button class="button primary" style="width:100%" type="submit">'+(signup?"Create account":"Log in")+'</button></form><div class="modal-switch">'+(signup?'Already have an account? <button id="switchAuth">Log in</button>':'New here? <button id="switchAuth">Create an account</button>')+'</div></section></div>';
       document.getElementById("modalClose").onclick=closeModal;
       document.getElementById("modalBackdrop").onclick=e=>{if(e.target.id==="modalBackdrop")closeModal()};
       document.getElementById("switchAuth").onclick=()=>openAuth(signup?"login":"signup");
@@ -132,7 +150,8 @@
             if(!/^[a-z0-9_]{3,20}$/.test(username)) throw new Error("Username must be 3–20 characters using letters, numbers or underscores.");
             const displayName=form.displayName.value.trim(); if(!displayName) throw new Error("Please enter a display name.");
             const credential=await createUserWithEmailAndPassword(auth,email,password);
-            const profile={uid:credential.user.uid,username,displayName,avatarUrl:safeImageUrl(form.profilePicture.value),createdAt:serverTimestamp()};
+            const avatarData=await compressImage(form.profilePicture.files[0],320,180000);
+            const profile={uid:credential.user.uid,username,displayName,avatarUrl:"",avatarData,createdAt:serverTimestamp()};
             try {
               await runTransaction(db,async transaction=>{
                 const usernameRef=doc(db,"usernames",username);
@@ -152,7 +171,7 @@
 
     function updateAccountUI() {
       if(currentUser && currentProfile){
-        accountActions.innerHTML='<button class="link-btn" id="profileOpen">'+avatarMarkup(currentProfile.avatarUrl,currentProfile.displayName||currentProfile.username)+' '+escapeHtml(currentProfile.displayName||currentProfile.username)+'</button><button class="button" id="logoutButton">Log out</button>';
+        accountActions.innerHTML='<button class="link-btn" id="profileOpen">'+avatarMarkup(currentProfile.avatarUrl,currentProfile.displayName||currentProfile.username,currentProfile.avatarData)+' '+escapeHtml(currentProfile.displayName||currentProfile.username)+'</button><button class="button" id="logoutButton">Log out</button>';
         document.getElementById("profileOpen").onclick=loadProfile;
         document.getElementById("logoutButton").onclick=()=>signOut(auth);
       } else {
@@ -166,8 +185,9 @@
       currentPage="create";
       if(!currentUser){renderShell("Create a release","Log in to build and save your fictional discography.",'<div class="notice">You need an account to create releases.</div><button class="button primary" id="createLogin">Log in</button>');document.getElementById("createLogin").onclick=()=>openAuth("login");return;}
       editingReleaseId=release?.id||null;
+      editingReleaseData=release||null;
       const tracks=release?.tracks?.length?release.tracks:[{title:"",credit:""}];
-      renderShell(release?"Edit release":"Create a release","Build an album or EP for your fictional artist.",'<div class="form-wrap"><form id="releaseForm"><div class="form-grid"><div class="field"><label for="releaseTitle">Release title *</label><input id="releaseTitle" maxlength="70" required value="'+escapeHtml(release?.title||"")+'" placeholder="e.g. The First Chapter"></div><div class="field"><label for="artistName">Artist / group *</label><input id="artistName" maxlength="60" required value="'+escapeHtml(release?.artist||"")+'" placeholder="e.g. NOVA"></div><div class="field"><label for="releaseType">Release type</label><select id="releaseType"><option '+(!release||release.type==="Album"?"selected":"")+' value="Album">Album</option><option '+(release?.type==="EP"?"selected":"")+' value="EP">EP</option><option '+(release?.type==="Single"?"selected":"")+' value="Single">Single</option><option '+(release?.type==="Mixtape"?"selected":"")+' value="Mixtape">Mixtape</option></select></div><div class="field"><label for="releaseDate">Release date</label><input id="releaseDate" type="date" value="'+escapeHtml(release?.releaseDate||"")+'"></div></div><div class="field"><label for="coverUrl">Cover image URL</label><input id="coverUrl" type="url" value="'+escapeHtml(release?.coverUrl||"")+'" placeholder="https://…"><span class="hint">Use an image URL. Image uploads are not enabled in this version.</span></div><div class="field"><label for="description">Description</label><textarea id="description" maxlength="600" placeholder="A short description of this release…">'+escapeHtml(release?.description||"")+'</textarea></div><div class="section-head"><h2>Tracklist</h2><span class="muted" id="trackCount">'+tracks.length+' tracks</span></div><div id="trackRows">'+tracks.map((t,i)=>trackRow(t,i)).join("")+'</div><button class="button" type="button" id="addTrack">+ Add track</button><div class="field" style="margin-top:24px"><label><input type="checkbox" id="publishRelease" style="width:auto;margin-right:8px" '+(release?.published?"checked":"")+'> Publish this release to Discover</label><span class="hint">Unpublished releases are only visible in your library.</span></div><div id="formMessage" class="error"></div><div class="form-actions"><button class="button primary" type="submit">'+(release?"Save changes":"Save release")+'</button><button class="button" type="button" id="cancelCreate">Cancel</button></div></form></div>');
+      renderShell(release?"Edit release":"Create a release","Build an album or EP for your fictional artist.",'<div class="form-wrap"><form id="releaseForm"><div class="form-grid"><div class="field"><label for="releaseTitle">Release title *</label><input id="releaseTitle" maxlength="70" required value="'+escapeHtml(release?.title||"")+'" placeholder="e.g. The First Chapter"></div><div class="field"><label for="artistName">Artist / group *</label><input id="artistName" maxlength="60" required value="'+escapeHtml(release?.artist||"")+'" placeholder="e.g. NOVA"></div><div class="field"><label for="releaseType">Release type</label><select id="releaseType"><option '+(!release||release.type==="Album"?"selected":"")+' value="Album">Album</option><option '+(release?.type==="EP"?"selected":"")+' value="EP">EP</option><option '+(release?.type==="Single"?"selected":"")+' value="Single">Single</option><option '+(release?.type==="Mixtape"?"selected":"")+' value="Mixtape">Mixtape</option></select></div><div class="field"><label for="releaseDate">Release date</label><input id="releaseDate" type="date" value="'+escapeHtml(release?.releaseDate||"")+'"></div></div><div class="field"><label for="coverFile">Cover image</label><input id="coverFile" type="file" accept="image/*"><span class="hint">Choose an image from your device. Existing cover art is kept unless you select a replacement.</span></div><div class="field"><label for="description">Description</label><textarea id="description" maxlength="600" placeholder="A short description of this release…">'+escapeHtml(release?.description||"")+'</textarea></div><div class="section-head"><h2>Tracklist</h2><span class="muted" id="trackCount">'+tracks.length+' tracks</span></div><div id="trackRows">'+tracks.map((t,i)=>trackRow(t,i)).join("")+'</div><button class="button" type="button" id="addTrack">+ Add track</button><div class="field" style="margin-top:24px"><label><input type="checkbox" id="publishRelease" style="width:auto;margin-right:8px" '+(release?.published?"checked":"")+'> Publish this release to Discover</label><span class="hint">Unpublished releases are only visible in your library.</span></div><div id="formMessage" class="error"></div><div class="form-actions"><button class="button primary" type="submit">'+(release?"Save changes":"Save release")+'</button><button class="button" type="button" id="cancelCreate">Cancel</button></div></form></div>');
       document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page==="create"));
       const rows=document.getElementById("trackRows");
       document.getElementById("addTrack").onclick=()=>{const n=rows.children.length;rows.insertAdjacentHTML("beforeend",trackRow({title:"",credit:""},n));updateTrackRows();};
@@ -184,7 +204,7 @@
       try{
         const tracks=[...form.querySelectorAll(".track-row")].map(row=>({title:row.querySelector(".track-title-input").value.trim(),credit:row.querySelector(".track-credit-input").value.trim()})).filter(t=>t.title);
         if(!tracks.length)throw new Error("Add at least one track to your release.");
-        const data={title:form.releaseTitle.value.trim(),artist:form.artistName.value.trim(),type:form.releaseType.value,releaseDate:form.releaseDate.value,coverUrl:form.coverUrl.value.trim(),description:form.description.value.trim(),tracks,published:form.publishRelease.checked,ownerId:currentUser.uid,ownerName:currentProfile.displayName||currentProfile.username,updatedAt:serverTimestamp()};
+        const data={title:form.releaseTitle.value.trim(),artist:form.artistName.value.trim(),type:form.releaseType.value,releaseDate:form.releaseDate.value,coverUrl:"",coverData:form.coverFile.files[0]?await compressImage(form.coverFile.files[0],1000,420000):(editingReleaseData?.coverData||""),description:form.description.value.trim(),tracks,published:form.publishRelease.checked,ownerId:currentUser.uid,ownerName:currentProfile.displayName||currentProfile.username,updatedAt:serverTimestamp()};
         if(editingReleaseId){await updateDoc(doc(db,"releases",editingReleaseId),data);}
         else{data.createdAt=serverTimestamp();await setDoc(doc(collection(db,"releases")),data);}
         await loadLibrary();
@@ -209,8 +229,8 @@
     }
     function renderProfileSettings(){
       const content=document.getElementById("libraryContent");
-      content.innerHTML='<div class="form-wrap"><form id="profileForm"><div class="field"><label for="profileUsername">Username</label><input id="profileUsername" value="'+escapeHtml(currentProfile.username||"")+'" disabled><span class="hint">Usernames cannot be changed in this version.</span></div><div class="field"><label for="profileDisplay">Display name</label><input id="profileDisplay" maxlength="32" required value="'+escapeHtml(currentProfile.displayName||"")+'"></div><div class="field"><label for="profilePictureUrl">Profile picture URL</label><input id="profilePictureUrl" type="url" value="'+escapeHtml(currentProfile.avatarUrl||"")+'" placeholder="https://…"><span class="hint">Paste a direct HTTPS image link.</span></div><div id="formMessage" class="error"></div><button class="button primary" type="submit">Save profile</button></form></div>';
-      document.getElementById("profileForm").onsubmit=async e=>{e.preventDefault();const displayName=document.getElementById("profileDisplay").value.trim();if(!displayName)return;try{const avatarUrl=safeImageUrl(document.getElementById("profilePictureUrl").value.trim());await updateDoc(doc(db,"users",currentUser.uid),{displayName,avatarUrl});await updateProfile(currentUser,{displayName});currentProfile={...currentProfile,displayName,avatarUrl};updateAccountUI();showMessage("Profile updated.","success");}catch(error){showMessage(friendlyError(error));}};
+      content.innerHTML='<div class="form-wrap"><form id="profileForm"><div class="field"><label for="profileUsername">Username</label><input id="profileUsername" value="'+escapeHtml(currentProfile.username||"")+'" disabled><span class="hint">Usernames cannot be changed in this version.</span></div><div class="field"><label for="profileDisplay">Display name</label><input id="profileDisplay" maxlength="32" required value="'+escapeHtml(currentProfile.displayName||"")+'"></div><div class="field"><label for="profilePictureFile">Profile picture</label><input id="profilePictureFile" type="file" accept="image/*"><span class="hint">Choose a new image to replace your current picture. Leave blank to keep it.</span></div><div id="formMessage" class="error"></div><button class="button primary" type="submit">Save profile</button></form></div>';
+      document.getElementById("profileForm").onsubmit=async e=>{e.preventDefault();const displayName=document.getElementById("profileDisplay").value.trim();if(!displayName)return;try{const file=document.getElementById("profilePictureFile").files[0];const avatarData=file?await compressImage(file,320,180000):(currentProfile.avatarData||"");const avatarUrl=file?"":(currentProfile.avatarUrl||"");await updateDoc(doc(db,"users",currentUser.uid),{displayName,avatarUrl,avatarData});await updateProfile(currentUser,{displayName});currentProfile={...currentProfile,displayName,avatarUrl,avatarData};updateAccountUI();showMessage("Profile updated.","success");}catch(error){showMessage(friendlyError(error));}};
     }
 
     async function openRelease(id){

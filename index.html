@@ -290,7 +290,7 @@
           const release=releaseSnap.data();
           if(release.marketplaceListed!==true||release.published!==true)throw new Error("This release is no longer available to claim.");
           if(release.ownerId===currentUser.uid)throw new Error("You already own this release.");
-          transaction.update(releaseRef,{ownerId:currentUser.uid,ownerName:currentProfile.displayName||currentProfile.username,ownerAvatarUrl:currentProfile.avatarUrl||"",ownerAvatarData:currentProfile.avatarData||"",creatorId:release.creatorId||release.ownerId,creatorName:release.creatorName||release.ownerName||"Community member",creatorAvatarUrl:release.creatorAvatarUrl??release.ownerAvatarUrl??"",creatorAvatarData:release.creatorAvatarData??release.ownerAvatarData??"",marketplaceListed:false,claimedAt:serverTimestamp(),updatedAt:serverTimestamp()});
+          transaction.update(releaseRef,{ownerId:currentUser.uid,ownerName:currentProfile.displayName||currentProfile.username,ownerAvatarUrl:currentProfile.avatarUrl||"",ownerAvatarData:currentProfile.avatarData||"",creatorId:release.creatorId||release.ownerId,creatorName:release.creatorName||release.ownerName||"Community member",creatorAvatarUrl:release.creatorAvatarUrl??release.ownerAvatarUrl??"",creatorAvatarData:release.creatorAvatarData??release.ownerAvatarData??"",published:false,marketplaceListed:false,claimedAt:serverTimestamp(),updatedAt:serverTimestamp()});
         });
         await openRelease(id);
       }catch(error){alert(friendlyError(error));}

@@ -41,12 +41,12 @@ service cloud.firestore {
           && resource.data.marketplaceListed == true
           && request.resource.data.ownerId == request.auth.uid
           && request.resource.data.marketplaceListed == false
-          && request.resource.data.published == true
+          && request.resource.data.published == false
           && request.resource.data.creatorId == resource.data.get('creatorId', resource.data.ownerId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'ownerId', 'ownerName', 'ownerAvatarUrl', 'ownerAvatarData',
             'creatorId', 'creatorName', 'creatorAvatarUrl', 'creatorAvatarData',
-            'marketplaceListed', 'claimedAt', 'updatedAt'
+            'published', 'marketplaceListed', 'claimedAt', 'updatedAt'
           ]))
       );
       allow delete: if signedIn()

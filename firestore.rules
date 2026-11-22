@@ -63,6 +63,21 @@ service cloud.firestore {
       );
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
 
+      match /ratings/{userId} {
+        allow read: if get(/databases/$(database)/documents/releases/$(releaseId)).data.published == true
+          || (signedIn() && get(/databases/$(database)/documents/releases/$(releaseId)).data.ownerId == request.auth.uid);
+        allow create, update: if signedIn()
+          && request.auth.uid == userId
+          && get(/databases/$(database)/documents/releases/$(releaseId)).data.published == true
+          && get(/databases/$(database)/documents/releases/$(releaseId)).data.ratingsEnabled == true
+          && get(/databases/$(database)/documents/releases/$(releaseId)).data.ownerId != request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.score is int
+          && request.resource.data.score >= 1
+          && request.resource.data.score <= 10;
+        allow delete: if signedIn() && request.auth.uid == userId;
+      }
+
       match /comments/{commentId} {
         function canViewRelease() {
           return get(/databases/$(database)/documents/releases/$(releaseId)).data.published == true

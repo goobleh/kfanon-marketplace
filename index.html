@@ -24,6 +24,7 @@
     .modal-backdrop{position:fixed;inset:0;background:#0006;display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}.modal{width:100%;max-width:430px;background:#fff;border-radius:10px;padding:28px;max-height:90vh;overflow:auto}.modal h2{font-size:22px;margin:0 0 7px}.modal p{font-size:13px;color:#777;margin:0 0 22px;line-height:1.5}.modal-close{float:right;border:0;background:none;font-size:22px;color:#888}.modal-switch{font-size:13px;color:#777;margin-top:18px}.modal-switch button{border:0;background:none;text-decoration:underline;padding:0;color:#171717}
     .detail{display:grid;grid-template-columns:minmax(220px,360px) 1fr;gap:34px;align-items:start}.detail .cover{border-radius:5px}.detail h1{font-size:32px;letter-spacing:-1px;margin:0 0 7px}.detail-meta{color:#777;font-size:14px;margin-bottom:18px}.detail-description{font-size:14px;line-height:1.7;color:#555;white-space:pre-wrap}.people-list{display:grid;gap:12px;margin:20px 0;padding:16px 0;border-top:1px solid #eee;border-bottom:1px solid #eee}.person-row{display:flex;align-items:center;gap:10px;font-size:13px}.person-row .avatar{width:36px;height:36px}.person-label{display:block;color:#888;font-size:11px;margin-bottom:2px}.marketplace-badge{font-size:11px;color:#237a45;margin-top:12px}.track-list{margin-top:25px;border-top:1px solid #eee}.track{display:flex;justify-content:space-between;gap:15px;padding:12px 0;border-bottom:1px solid #eee;font-size:13px}.track span:first-child{color:#888;width:25px}.track .track-title{flex:1}.track .track-credit{color:#888;text-align:right}.track .spotify-track-link{margin-left:4px}
     .footer{border-top:1px solid #eee;padding:24px;text-align:center;color:#999;font-size:12px}
+    .browse-controls{display:flex;gap:10px;margin:-6px 0 20px;align-items:center}.browse-controls input,.browse-controls select{border:1px solid #dedede;border-radius:6px;padding:10px 12px;background:#fff;color:#171717;font-size:13px;min-width:0}.browse-controls input{flex:1;min-width:180px}.browse-controls select{min-width:145px}.library-controls{margin-top:0}@media(max-width:600px){.browse-controls{flex-wrap:wrap}.browse-controls input{flex-basis:100%}.browse-controls select{flex:1;min-width:0}}
     @media(max-width:800px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.topbar{padding:0 18px}.nav{gap:14px}main{padding:34px 20px 60px}.create-layout{grid-template-columns:1fr;gap:0}#releaseForm{grid-template-columns:1fr;column-gap:0}#releaseForm>.create-fields,#releaseForm>.preview-panel{grid-column:1;grid-row:auto}#releaseForm>.preview-panel{position:static;margin:0 0 22px}.preview-grid{max-width:none}}
     @media(max-width:600px){.track-row{grid-template-columns:22px minmax(90px,1fr) minmax(90px,1fr) minmax(120px,1.2fr) 25px;gap:5px}.track-row input{padding:9px 6px;font-size:11px}.topbar{height:auto;min-height:60px;flex-wrap:wrap;padding:13px 16px;gap:12px}.nav{order:3;width:100%;justify-content:space-between;border-top:1px solid #eee;padding-top:9px}.account-actions{margin-left:auto}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 13px}.hero{padding:18px 0 27px}.form-grid{grid-template-columns:1fr;gap:0}.detail{grid-template-columns:1fr;gap:22px}.detail .cover{max-width:360px}.track-row{grid-template-columns:25px 1fr 1fr 28px;gap:5px}.track-row input{padding:9px 7px;font-size:12px}.section-head{align-items:center}}
   </style>
@@ -122,22 +123,43 @@
       document.querySelectorAll("[data-release]").forEach(card=>card.addEventListener("click",()=>openRelease(card.dataset.release)));
     }
 
+    let marketplaceReleases=[], discoverReleases=[];
+    function releaseControls(prefix){
+      return '<div class="browse-controls"><input id="'+prefix+'Search" type="search" placeholder="Search releases or artists…" aria-label="Search releases or artists"><select id="'+prefix+'Type" aria-label="Filter by release type"><option value="">All release types</option><option>Album</option><option>EP</option><option>Single</option><option>Mixtape</option></select><select id="'+prefix+'Sort" aria-label="Sort releases"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option><option value="artist">Artist A–Z</option></select></div>';
+    }
+    function filteredReleases(items,prefix,dateField="createdAt"){
+      const term=(document.getElementById(prefix+"Search")?.value||"").trim().toLowerCase();
+      const type=document.getElementById(prefix+"Type")?.value||"";
+      const sort=document.getElementById(prefix+"Sort")?.value||"newest";
+      const result=items.filter(r=>(!type||r.type===type)&&(!term||[r.title,r.artist,r.creatorName,r.ownerName].some(v=>String(v||"").toLowerCase().includes(term))));
+      result.sort((a,b)=>{
+        if(sort==="title")return String(a.title||"").localeCompare(String(b.title||""));
+        if(sort==="artist")return String(a.artist||"").localeCompare(String(b.artist||""));
+        return sort==="oldest"?timestampValue(a[dateField])-timestampValue(b[dateField]):timestampValue(b[dateField])-timestampValue(a[dateField]);
+      });
+      return result;
+    }
+    function renderDiscoverResults(){
+      const listed=filteredReleases(marketplaceReleases,"marketplace");
+      const recent=filteredReleases(discoverReleases,"discover");
+      document.getElementById("marketplaceSection").style.display=marketplaceReleases.length?"block":"none";
+      document.getElementById("marketplaceCount").textContent=listed.length+" of "+marketplaceReleases.length+" available";
+      document.getElementById("marketplaceGrid").innerHTML=listed.length?listed.map(releaseCard).join(""):'<div class="empty" style="grid-column:1/-1">No marketplace releases match those filters.</div>';
+      document.getElementById("releaseCount").textContent=recent.length+" of "+discoverReleases.length+" releases";
+      document.getElementById("discoverGrid").innerHTML=recent.length?recent.map(releaseCard).join(""):'<div class="empty" style="grid-column:1/-1"><strong>No releases found.</strong>Try changing your search or filters.</div>';
+      bindCards();
+    }
     async function loadDiscover() {
       currentPage="discover";
-      renderShell("", "", '<section class="hero"><div class="eyebrow">A home for fictional music</div><h1>Your next favourite<br>release starts here.</h1><p>Explore fan-made K-pop discographies, build fictional albums and EPs, and bring your artists to life.</p></section><section id="marketplaceSection" style="display:none;margin-bottom:38px"><div class="section-head"><h2>Available to claim</h2><span class="muted" id="marketplaceCount"></span></div><div id="marketplaceGrid" class="grid"></div></section><div class="section-head"><h2>Recently published</h2><span class="muted" id="releaseCount"></span></div><div id="discoverGrid" class="grid"><div class="muted">Loading releases…</div></div>');
+      renderShell("", "", '<section class="hero"><div class="eyebrow">A home for fictional music</div><h1>Your next favourite<br>release starts here.</h1><p>Explore fan-made K-pop discographies, build fictional albums and EPs, and bring your artists to life.</p></section><section id="marketplaceSection" style="display:none;margin-bottom:38px"><div class="section-head"><h2>Available to claim</h2><span class="muted" id="marketplaceCount"></span></div>'+releaseControls("marketplace")+'<div id="marketplaceGrid" class="grid"></div></section><div class="section-head"><h2>Recently published</h2><span class="muted" id="releaseCount"></span></div>'+releaseControls("discover")+'<div id="discoverGrid" class="grid"><div class="muted">Loading releases…</div></div>');
       document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page==="discover"));
       try {
         const snap=await getDocs(query(collection(db,"releases"),where("published","==",true)));
-        cachedReleases=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(b.createdAt)-timestampValue(a.createdAt)).slice(0,40);
-        const listed=cachedReleases.filter(r=>r.marketplaceListed===true&&r.ownerId!==(currentUser?.uid||""));
-        const marketplaceSection=document.getElementById("marketplaceSection");
-        marketplaceSection.style.display=listed.length?"block":"none";
-        document.getElementById("marketplaceCount").textContent=listed.length+" available";
-        document.getElementById("marketplaceGrid").innerHTML=listed.map(releaseCard).join("");
-        const recent=cachedReleases.filter(r=>r.marketplaceListed!==true);
-        document.getElementById("releaseCount").textContent=recent.length+" releases";
-        document.getElementById("discoverGrid").innerHTML=recent.length?recent.map(releaseCard).join(""):'<div class="empty" style="grid-column:1/-1"><strong>Nothing here just yet.</strong>Be the first to publish a fictional release.</div>';
-        bindCards();
+        cachedReleases=snap.docs.map(d=>({id:d.id,...d.data()}));
+        marketplaceReleases=cachedReleases.filter(r=>r.marketplaceListed===true&&r.ownerId!==(currentUser?.uid||""));
+        discoverReleases=cachedReleases.filter(r=>r.marketplaceListed!==true);
+        ["marketplace","discover"].forEach(prefix=>["Search","Type","Sort"].forEach(suffix=>document.getElementById(prefix+suffix).addEventListener(suffix==="Search"?"input":"change",renderDiscoverResults)));
+        renderDiscoverResults();
       } catch(error) { document.getElementById("discoverGrid").innerHTML='<div class="empty" style="grid-column:1/-1"><strong>Could not load releases.</strong>'+escapeHtml(friendlyError(error))+'</div>'; }
     }
 
@@ -266,11 +288,21 @@
       if(libraryTab==="profile"){renderProfileSettings();return;}
       try{
         const snap=await getDocs(query(collection(db,"releases"),where("ownerId","==",currentUser.uid)));
-        const releases=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(b.updatedAt)-timestampValue(a.updatedAt));
-        document.getElementById("libraryContent").innerHTML='<div class="section-head"><span class="muted">'+releases.length+' releases</span><button class="button primary" id="newRelease">Create release</button></div>'+(releases.length?'<div class="grid">'+releases.map(r=>'<div>'+releaseCard(r)+'<div class="muted" style="margin-top:7px;font-size:12px">'+(r.published?(r.marketplaceListed?"On marketplace":"Public"):"Private draft")+'</div></div>').join("")+'</div>':'<div class="empty"><strong>Your library is empty.</strong>Create your first album or EP to get started.</div>');
+        const releases=snap.docs.map(d=>({id:d.id,...d.data()}));
+        const content=document.getElementById("libraryContent");
+        content.innerHTML='<div class="section-head"><span class="muted" id="libraryCount">'+releases.length+' releases</span><button class="button primary" id="newRelease">Create release</button></div><div class="browse-controls library-controls"><input id="librarySearch" type="search" placeholder="Search your releases or artists…" aria-label="Search your library"><select id="librarySort" aria-label="Sort your library"><option value="updated">Recently updated</option><option value="newest">Newest created</option><option value="oldest">Oldest created</option><option value="title">Title A–Z</option><option value="artist">Artist A–Z</option><option value="type">Release type</option></select></div><div id="libraryGrid" class="grid"></div>';
+        const drawLibrary=()=>{
+          const term=document.getElementById("librarySearch").value.trim().toLowerCase(),sort=document.getElementById("librarySort").value;
+          const filtered=releases.filter(r=>!term||[r.title,r.artist,r.type].some(v=>String(v||"").toLowerCase().includes(term)));
+          filtered.sort((a,b)=>sort==="title"?String(a.title||"").localeCompare(String(b.title||"")):sort==="artist"?String(a.artist||"").localeCompare(String(b.artist||"")):sort==="type"?String(a.type||"").localeCompare(String(b.type||"")):sort==="oldest"?timestampValue(a.createdAt)-timestampValue(b.createdAt):sort==="newest"?timestampValue(b.createdAt)-timestampValue(a.createdAt):timestampValue(b.updatedAt)-timestampValue(a.updatedAt));
+          document.getElementById("libraryCount").textContent=filtered.length+" of "+releases.length+" releases";
+          document.getElementById("libraryGrid").innerHTML=filtered.length?'<div class="grid" style="grid-column:1/-1">'+filtered.map(r=>'<div>'+releaseCard(r)+'<div class="muted" style="margin-top:7px;font-size:12px">'+(r.published?(r.marketplaceListed?"On marketplace":"Public"):"Private draft")+'</div></div>').join("")+'</div>':'<div class="empty" style="grid-column:1/-1"><strong>No releases found.</strong>Try a different search.</div>';
+          bindCards();
+        };
         document.getElementById("newRelease").onclick=()=>loadCreate();
-        bindCards();
-        document.querySelectorAll("[data-release]").forEach(card=>card.addEventListener("contextmenu",e=>e.preventDefault()));
+        document.getElementById("librarySearch").addEventListener("input",drawLibrary);
+        document.getElementById("librarySort").addEventListener("change",drawLibrary);
+        drawLibrary();
       }catch(error){document.getElementById("libraryContent").innerHTML='<div class="error">'+escapeHtml(friendlyError(error))+'</div>';}
     }
     function renderProfileSettings(){

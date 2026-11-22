@@ -32,9 +32,23 @@ service cloud.firestore {
         && request.resource.data.title is string
         && request.resource.data.artist is string
         && request.resource.data.tracks is list;
-      allow update: if signedIn()
-        && resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerId == resource.data.ownerId;
+      allow update: if signedIn() && (
+        (resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.get('creatorId', resource.data.ownerId) == resource.data.get('creatorId', resource.data.ownerId))
+        ||
+        (resource.data.published == true
+          && resource.data.marketplaceListed == true
+          && request.resource.data.ownerId == request.auth.uid
+          && request.resource.data.marketplaceListed == false
+          && request.resource.data.published == true
+          && request.resource.data.creatorId == resource.data.get('creatorId', resource.data.ownerId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'ownerId', 'ownerName', 'ownerAvatarUrl', 'ownerAvatarData',
+            'creatorId', 'creatorName', 'creatorAvatarUrl', 'creatorAvatarData',
+            'marketplaceListed', 'claimedAt', 'updatedAt'
+          ]))
+      );
       allow delete: if signedIn()
         && resource.data.ownerId == request.auth.uid;
     }

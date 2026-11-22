@@ -286,7 +286,7 @@
     function spotifyButton(value){
       let url="";try{url=normalizeSpotifyTrackUrl(value);}catch{return "";}
       if(!url)return "";
-      return '<a class="spotify-link spotify-track-link" href="'+escapeHtml(url)+'" target="_blank" rel="noopener noreferrer" aria-label="Listen on Spotify" title="Listen on Spotify"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M5.4 9.1c4.8-1.45 9.7-.95 13.4 1.15M6.2 12.1c4.1-1.15 8.5-.72 11.8 1.02M7 15c3.35-.85 7-.48 10.1.9" fill="none" stroke="#fff" stroke-width="1.45" stroke-linecap="round"/></svg></a>';
+      return '<a class="spotify-link spotify-track-link" href="'+escapeHtml(url)+'" target="_blank" rel="noopener noreferrer" aria-label="Open linked track" title="Open linked track"><img src="https://hexmos.com/freedevtools/svg_icons/soundcloud/music-awesome.svg" alt="" aria-hidden="true"></a>';
     }
     function trackRow(track,index){
       return '<div class="track-row"><span class="track-num">'+(index+1)+'</span><input aria-label="Track '+(index+1)+' title" class="track-title-input" maxlength="100" placeholder="Track title" value="'+escapeHtml(track.title||"")+'" required><input aria-label="Track '+(index+1)+' credit" class="track-credit-input" maxlength="100" placeholder="Original artist (optional)" value="'+escapeHtml(track.credit||"")+'"><input aria-label="Track '+(index+1)+' Spotify link (optional)" class="track-spotify-input" type="url" placeholder="Spotify track link (optional)" value="'+escapeHtml(track.spotifyUrl||"")+'"><button class="icon-button" type="button" data-remove-track aria-label="Remove track">×</button></div>';

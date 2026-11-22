@@ -335,18 +335,29 @@
       if(ratingUnsubscribe){ratingUnsubscribe();ratingUnsubscribe=null;}
       const panel=document.getElementById("ratingContent");
       if(!panel||!release.published||release.ratingsEnabled!==true)return;
-      if(!currentUser){panel.innerHTML='<div class="muted">Log in to rate this release.</div>';return;}
-      if(release.ownerId===currentUser.uid){panel.innerHTML='<div class="muted">You cannot rate your own release.</div>';return;}
       let draft=0,ownRating=0;
-      const draw=(ratings)=>{
+      const canRate=!!currentUser&&release.ownerId!==currentUser.uid;
+      const draw=ratings=>{
         const values=ratings.map(x=>Number(x.score)).filter(x=>Number.isInteger(x)&&x>=1&&x<=10);
-        const average=values.length?(values.reduce((a,b)=>a+b,0)/values.length):0;
+        const average=values.length?values.reduce((a,b)=>a+b,0)/values.length:0;
+        const summary='<div class="rating-summary"><span class="rating-average">'+(values.length?average.toFixed(1):"—")+'</span><span class="muted">/ 10</span><span class="rating-count">'+values.length+' '+(values.length===1?'rating':'ratings')+'</span></div>';
+        if(!canRate){
+          panel.innerHTML=summary+'<div class="muted">'+(currentUser?'You cannot rate your own release.':'Log in to rate this release.')+'</div>';
+          return;
+        }
         const stars=Array.from({length:10},(_,i)=>'<button type="button" class="rating-star '+(i+1<=draft?'active':'')+'" data-rating="'+(i+1)+'" aria-label="Rate '+(i+1)+' out of 10" aria-pressed="'+(i+1===draft)+'">★</button>').join("");
-        panel.innerHTML='<div class="rating-summary"><span class="rating-average">'+(values.length?average.toFixed(1):"—")+'</span><span class="muted">/ 10</span><span class="rating-count">'+values.length+' '+(values.length===1?'rating':'ratings')+'</span></div><div class="rating-stars" id="ratingStars">'+stars+'</div><div class="rating-controls"><button class="button primary" id="submitRating" type="button" '+(!draft?'disabled':'')+'>'+(ownRating?'Update rating':'Submit rating')+'</button><span class="muted">'+(ownRating?'Your rating: '+ownRating+'/10':(draft?'Selected: '+draft+'/10':'Choose a rating'))+'</span></div><span class="hint">Select a star or drag across the stars, then submit your rating.</span>';
+        panel.innerHTML=summary+'<div class="rating-stars" id="ratingStars">'+stars+'</div><div class="rating-controls"><button class="button primary" id="submitRating" type="button" '+(!draft?'disabled':'')+'>'+(ownRating?'Update rating':'Submit rating')+'</button><span class="muted">'+(ownRating?'Your rating: '+ownRating+'/10':(draft?'Selected: '+draft+'/10':'Choose a rating'))+'</span></div><span class="hint">Select a star or drag across the stars, then submit your rating.</span>';
         const starBox=document.getElementById("ratingStars");
-        const choose=e=>{const star=e.target.closest("[data-rating]");if(!star)return;draft=Number(star.dataset.rating);draw(ratings);};
-        starBox.addEventListener("pointerdown",e=>{if(e.pointerType==="mouse"||e.pointerType==="touch"||e.pointerType==="pen"){e.preventDefault();choose(e);}});
-        starBox.addEventListener("pointermove",e=>{if(e.buttons===1||e.pointerType==="touch"){const star=e.target.closest("[data-rating]");if(star){draft=Number(star.dataset.rating);starBox.querySelectorAll("[data-rating]").forEach(x=>x.classList.toggle("active",Number(x.dataset.rating)<=draft));const status=panel.querySelector(".rating-controls .muted");if(status)status.textContent="Selected: "+draft+"/10";const submit=document.getElementById("submitRating");if(submit)submit.disabled=false;}}});
+        const updateSelection=star=>{
+          if(!star)return;
+          draft=Number(star.dataset.rating);
+          starBox.querySelectorAll("[data-rating]").forEach(x=>{const active=Number(x.dataset.rating)<=draft;x.classList.toggle("active",active);x.setAttribute("aria-pressed",String(Number(x.dataset.rating)===draft));});
+          const status=panel.querySelector(".rating-controls .muted");if(status)status.textContent="Selected: "+draft+"/10";
+          const submit=document.getElementById("submitRating");if(submit)submit.disabled=false;
+        };
+        starBox.addEventListener("pointerdown",e=>{const star=e.target.closest("[data-rating]");if(star){e.preventDefault();updateSelection(star);}});
+        starBox.addEventListener("pointermove",e=>{if(e.buttons===1||e.pointerType==="touch")updateSelection(e.target.closest("[data-rating]"));});
+        starBox.addEventListener("click",e=>updateSelection(e.target.closest("[data-rating]")));
         document.getElementById("submitRating").onclick=async()=>{
           const button=document.getElementById("submitRating");if(!draft)return;button.disabled=true;button.textContent="Saving…";
           try{await setDoc(doc(db,"releases",id,"ratings",currentUser.uid),{userId:currentUser.uid,score:draft,updatedAt:serverTimestamp()});ownRating=draft;const snap=await getDocs(collection(db,"releases",id,"ratings"));draw(snap.docs.map(d=>d.data()));}
@@ -354,7 +365,7 @@
         };
       };
       ratingUnsubscribe=onSnapshot(collection(db,"releases",id,"ratings"),snapshot=>{
-        const ratings=snapshot.docs.map(d=>d.data());const own=ratings.find(x=>x.userId===currentUser.uid);ownRating=own?Number(own.score):0;if(!draft)draft=ownRating;draw(ratings);
+        const ratings=snapshot.docs.map(d=>d.data());const own=currentUser?ratings.find(x=>x.userId===currentUser.uid):null;ownRating=own?Number(own.score):0;if(!draft)draft=ownRating;draw(ratings);
       },error=>{panel.innerHTML='<div class="error">'+escapeHtml(friendlyError(error))+'</div>';});
     }
     function personRow(label,name,avatarUrl,avatarData){return '<div class="person-row">'+avatarMarkup(avatarUrl,name||"Profile picture",avatarData)+'<div><span class="person-label">'+escapeHtml(label)+'</span><strong>'+escapeHtml(name||"Community member")+'</strong></div></div>';}

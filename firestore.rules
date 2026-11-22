@@ -7,21 +7,33 @@ service cloud.firestore {
 
     match /usernames/{username} {
       allow read: if true;
-      allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
 
     match /users/{userId} {
       allow read: if true;
-      allow create: if signedIn()
-        && request.auth.uid == userId
-        && request.resource.data.uid == request.auth.uid;
-      allow update: if signedIn()
-        && request.auth.uid == userId
+      allow create: if signedIn() && request.auth.uid == userId && request.resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && request.auth.uid == userId
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.username == resource.data.username;
       allow delete: if false;
+
+      match /notifications/{notificationId} {
+        allow read, update, delete: if signedIn() && request.auth.uid == userId;
+        allow create: if signedIn()
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.read == false
+          && (
+            (request.resource.data.type == 'comment'
+              && request.resource.data.actorId != userId
+              && get(/databases/$(database)/documents/releases/$(request.resource.data.releaseId)).data.ownerId == userId)
+            ||
+            (request.resource.data.type == 'reply'
+              && request.resource.data.actorId != userId
+              && get(/databases/$(database)/documents/releases/$(request.resource.data.releaseId)/comments/$(request.resource.data.commentId)).data.authorId == userId)
+          );
+      }
     }
 
     match /releases/{releaseId} {
@@ -49,8 +61,35 @@ service cloud.firestore {
             'published', 'marketplaceListed', 'claimedAt', 'updatedAt'
           ]))
       );
-      allow delete: if signedIn()
-        && resource.data.ownerId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      match /comments/{commentId} {
+        function canViewRelease() {
+          return get(/databases/$(database)/documents/releases/$(releaseId)).data.published == true
+            || (signedIn() && get(/databases/$(database)/documents/releases/$(releaseId)).data.ownerId == request.auth.uid);
+        }
+        allow read: if canViewRelease();
+        allow create: if signedIn()
+          && canViewRelease()
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000;
+        allow update, delete: if signedIn() && resource.data.authorId == request.auth.uid;
+
+        match /replies/{replyId} {
+          allow read: if get(/databases/$(database)/documents/releases/$(releaseId)).data.published == true
+            || (signedIn() && get(/databases/$(database)/documents/releases/$(releaseId)).data.ownerId == request.auth.uid);
+          allow create: if signedIn()
+            && (get(/databases/$(database)/documents/releases/$(releaseId)).data.published == true
+              || get(/databases/$(database)/documents/releases/$(releaseId)).data.ownerId == request.auth.uid)
+            && request.resource.data.authorId == request.auth.uid
+            && request.resource.data.text is string
+            && request.resource.data.text.size() > 0
+            && request.resource.data.text.size() <= 1000;
+          allow update, delete: if signedIn() && resource.data.authorId == request.auth.uid;
+        }
+      }
     }
   }
 }

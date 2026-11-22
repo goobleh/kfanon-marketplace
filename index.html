@@ -46,7 +46,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
     import { getAuth, setPersistence, browserLocalPersistence, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, orderBy, limit, getDocs, onSnapshot, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDvKObfLoyBrds-cSrtV9DSnBgCAXS28Mw",
@@ -73,6 +73,7 @@
     let editingReleaseId = null;
     let editingReleaseData = null;
     let notificationCache = [];
+    let notificationUnsubscribe = null;
 
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
     const safeImageUrl = value => { try { const url=new URL(value); return url.protocol==="https:" ? url.href : ""; } catch { return ""; } };
@@ -203,6 +204,12 @@
               });
             } catch(err) { await credential.user.delete(); throw err; }
             await updateProfile(credential.user,{displayName});
+            currentUser=credential.user;
+            currentProfile=profile;
+            updateAccountUI();
+            closeModal();
+            await loadDiscover();
+            return;
           } else { await signInWithEmailAndPassword(auth,email,password); }
           closeModal();
         } catch(error) { showMessage(friendlyError(error)); button.disabled=false;button.textContent=signup?"Create account":"Log in"; }
@@ -221,8 +228,11 @@
         if(profileButton)profileButton.onclick=loadProfile;
         document.getElementById("notificationsOpen").onclick=loadNotifications;
         document.getElementById("logoutButton").onclick=()=>signOut(auth);
-        refreshNotificationCount();
+        if(!notificationUnsubscribe)subscribeToNotifications(currentUser.uid);
+        updateNotificationBell();
       } else {
+        if(notificationUnsubscribe){notificationUnsubscribe();notificationUnsubscribe=null;}
+        notificationCache=[];
         accountActions.innerHTML='<span class="account-status" style="color:#777">Not signed in</span><button class="button" id="loginOpen">Log in</button><button class="button primary" id="signupOpen">Sign up</button>';
         document.getElementById("loginOpen").onclick=()=>openAuth("login");
         document.getElementById("signupOpen").onclick=()=>openAuth("signup");
@@ -314,9 +324,11 @@
     }
 
     function shortTime(v){const ms=timestampValue(v);if(!ms)return "Just now";const m=Math.max(0,Math.floor((Date.now()-ms)/60000));if(m<1)return "Just now";if(m<60)return m+"m ago";const h=Math.floor(m/60);return h<24?h+"h ago":Math.floor(h/24)+"d ago";}
-    async function refreshNotificationCount(){if(!currentUser)return;try{const s=await getDocs(collection(db,"users",currentUser.uid,"notifications"));notificationCache=s.docs.map(d=>({id:d.id,...d.data()}));const n=notificationCache.filter(x=>!x.read).length,b=document.getElementById("notificationsOpen");if(b){b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>'+(n?'<span class="notification-dot" aria-hidden="true"></span>':"");b.title=n?n+" unread notification"+(n===1?"":"s"):"Notifications";b.setAttribute("aria-label",b.title);}}catch(e){console.warn(e);}}
+    function updateNotificationBell(){const n=notificationCache.filter(x=>!x.read).length,b=document.getElementById("notificationsOpen");if(b){b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>'+(n?'<span class="notification-dot" aria-hidden="true"></span>':"");b.title=n?n+" unread notification"+(n===1?"":"s"):"Notifications";b.setAttribute("aria-label",b.title);}}
+    function subscribeToNotifications(uid){if(notificationUnsubscribe){notificationUnsubscribe();notificationUnsubscribe=null;}notificationCache=[];if(!uid){updateNotificationBell();return;}notificationUnsubscribe=onSnapshot(collection(db,"users",uid,"notifications"),snapshot=>{notificationCache=snapshot.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(b.createdAt)-timestampValue(a.createdAt));updateNotificationBell();if(currentPage==="notifications")renderNotificationsList();},error=>console.warn("Notification listener failed:",error));}
     async function sendNotification(uid,data){if(!uid||uid===currentUser.uid)return;await setDoc(doc(collection(db,"users",uid,"notifications")),{...data,actorId:currentUser.uid,actorName:currentProfile?.displayName||currentProfile?.username||"A member",createdAt:serverTimestamp(),read:false});}
-    async function loadNotifications(){currentPage="notifications";if(!currentUser){openAuth("login");return;}renderShell("Notifications","Updates about your releases and conversations.",'<div id="notificationsContent" class="notification-list"><div class="muted">Loading…</div></div>');try{const s=await getDocs(collection(db,"users",currentUser.uid,"notifications"));notificationCache=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(b.createdAt)-timestampValue(a.createdAt));const c=document.getElementById("notificationsContent");if(!notificationCache.length){c.innerHTML='<div class="empty">You’re all caught up. New comments and replies will appear here.</div>';return;}c.innerHTML=notificationCache.map(n=>'<div class="notification-item '+(!n.read?'unread':'')+'" data-notification="'+escapeHtml(n.id)+'"><div style="flex:1"><p><strong>'+escapeHtml(n.actorName||"A member")+'</strong> '+(n.type==="reply"?"replied to your comment on ":"commented on ")+'<strong>'+escapeHtml(n.releaseTitle||"your release")+'</strong>.</p><small>'+shortTime(n.createdAt)+'</small></div><span class="muted">'+(!n.read?"New":"")+'</span></div>').join("");c.querySelectorAll("[data-notification]").forEach(el=>el.onclick=async()=>{const n=notificationCache.find(x=>x.id===el.dataset.notification);try{await updateDoc(doc(db,"users",currentUser.uid,"notifications",n.id),{read:true});}catch(e){}await openRelease(n.releaseId);refreshNotificationCount();});}catch(e){document.getElementById("notificationsContent").innerHTML='<div class="error">'+escapeHtml(friendlyError(e))+'</div>';}}
+    function renderNotificationsList(){const c=document.getElementById("notificationsContent");if(!c)return;if(!notificationCache.length){c.innerHTML='<div class="empty">You’re all caught up. New comments and replies will appear here.</div>';return;}c.innerHTML=notificationCache.map(n=>'<div class="notification-item '+(!n.read?'unread':'')+'" data-notification="'+escapeHtml(n.id)+'"><div style="flex:1"><p><strong>'+escapeHtml(n.actorName||"A member")+'</strong> '+(n.type==="reply"?"replied to your comment on ":"commented on ")+'<strong>'+escapeHtml(n.releaseTitle||"your release")+'</strong>.</p><small>'+shortTime(n.createdAt)+'</small></div><span class="muted">'+(!n.read?"New":"")+'</span></div>').join("");c.querySelectorAll("[data-notification]").forEach(el=>el.onclick=async()=>{const n=notificationCache.find(x=>x.id===el.dataset.notification);if(!n)return;try{await updateDoc(doc(db,"users",currentUser.uid,"notifications",n.id),{read:true});}catch(e){console.warn(e);}await openRelease(n.releaseId);});}
+    async function loadNotifications(){currentPage="notifications";if(!currentUser){openAuth("login");return;}renderShell("Notifications","Updates about your releases and conversations.",'<div id="notificationsContent" class="notification-list"><div class="muted">Loading…</div></div>');renderNotificationsList();}
     async function loadComments(release,id){const root=document.getElementById("commentsContent");if(!root)return;try{const s=await getDocs(collection(db,"releases",id,"comments")),cs=s.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(a.createdAt)-timestampValue(b.createdAt)),rs=await Promise.all(cs.map(c=>getDocs(collection(db,"releases",id,"comments",c.id,"replies")))),replies=rs.map(x=>x.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>timestampValue(a.createdAt)-timestampValue(b.createdAt)));root.innerHTML=(currentUser?'<form class="comment-form" id="commentForm"><textarea id="newComment" maxlength="1000" placeholder="Add to the conversation…" required></textarea><button class="button primary" type="submit">Post comment</button></form>':'<div class="notice">Log in to leave a comment or reply.</div>')+(cs.length?cs.map((c,i)=>'<article class="comment"><div class="comment-head">'+avatarMarkup(c.authorAvatarUrl,c.authorName,c.authorAvatarData)+'<strong>'+escapeHtml(c.authorName||"Community member")+'</strong><span class="comment-time">'+shortTime(c.createdAt)+'</span></div><div class="comment-text">'+escapeHtml(c.text)+'</div>'+(currentUser?'<div class="comment-actions"><button type="button" data-reply="'+escapeHtml(c.id)+'">Reply</button></div>':"")+'<div class="reply-list">'+replies[i].map(x=>'<div class="reply"><div class="comment-head">'+avatarMarkup(x.authorAvatarUrl,x.authorName,x.authorAvatarData)+'<strong>'+escapeHtml(x.authorName||"Community member")+'</strong><span class="comment-time">'+shortTime(x.createdAt)+'</span></div><div class="comment-text">'+escapeHtml(x.text)+'</div></div>').join("")+'</div><form class="reply-form" data-reply-form="'+escapeHtml(c.id)+'" style="display:none"><textarea maxlength="1000" placeholder="Write a reply…" required></textarea><button class="button" type="submit">Send reply</button></form></article>').join(""):'<div class="muted" style="padding:18px 0">No comments yet. Start the conversation.</div>');const form=document.getElementById("commentForm");if(form)form.onsubmit=async e=>{e.preventDefault();const t=document.getElementById("newComment").value.trim();if(!t)return;const b=form.querySelector("button");b.disabled=true;try{const ref=doc(collection(db,"releases",id,"comments"));await setDoc(ref,{text:t,authorId:currentUser.uid,authorName:currentProfile?.displayName||currentProfile?.username||"Community member",authorAvatarUrl:currentProfile?.avatarUrl||"",authorAvatarData:currentProfile?.avatarData||"",createdAt:serverTimestamp()});if(release.ownerId!==currentUser.uid)await sendNotification(release.ownerId,{type:"comment",releaseId:id,releaseTitle:release.title,commentId:ref.id,text:t});await loadComments(release,id);}catch(e){alert(friendlyError(e));b.disabled=false;}};root.querySelectorAll("[data-reply]").forEach(b=>b.onclick=()=>{const f=root.querySelector('[data-reply-form="'+b.dataset.reply+'"]');f.style.display=f.style.display==="none"?"block":"none";});root.querySelectorAll("[data-reply-form]").forEach(f=>f.onsubmit=async e=>{e.preventDefault();const t=f.querySelector("textarea").value.trim();if(!t)return;const c=cs.find(x=>x.id===f.dataset.replyForm),b=f.querySelector("button");b.disabled=true;try{const ref=doc(collection(db,"releases",id,"comments",c.id,"replies"));await setDoc(ref,{text:t,authorId:currentUser.uid,authorName:currentProfile?.displayName||currentProfile?.username||"Community member",authorAvatarUrl:currentProfile?.avatarUrl||"",authorAvatarData:currentProfile?.avatarData||"",createdAt:serverTimestamp()});if(c.authorId!==currentUser.uid)await sendNotification(c.authorId,{type:"reply",releaseId:id,releaseTitle:release.title,commentId:c.id,replyId:ref.id,text:t});await loadComments(release,id);}catch(e){alert(friendlyError(e));b.disabled=false;}});}catch(e){root.innerHTML='<div class="error">'+escapeHtml(friendlyError(e))+'</div>';}}
     function personRow(label,name,avatarUrl,avatarData){return '<div class="person-row">'+avatarMarkup(avatarUrl,name||"Profile picture",avatarData)+'<div><span class="person-label">'+escapeHtml(label)+'</span><strong>'+escapeHtml(name||"Community member")+'</strong></div></div>';}
     async function claimRelease(id){
@@ -371,10 +383,13 @@
 
     onAuthStateChanged(auth,async user=>{
       currentUser=user;currentProfile=null;
+      if(notificationUnsubscribe){notificationUnsubscribe();notificationUnsubscribe=null;}
+      notificationCache=[];
       updateAccountUI();
-      if(user){try{const snap=await getDoc(doc(db,"users",user.uid));if(snap.exists())currentProfile=snap.data();else console.warn("Signed-in account has no matching Firestore profile.");}catch(error){console.error("Could not load account profile:",error);}}
+      if(user){try{let snap=await getDoc(doc(db,"users",user.uid));for(let attempt=0;!snap.exists()&&attempt<5;attempt++){await new Promise(resolve=>setTimeout(resolve,250));snap=await getDoc(doc(db,"users",user.uid));}if(snap.exists())currentProfile=snap.data();else console.warn("Signed-in account has no matching Firestore profile.");}catch(error){console.error("Could not load account profile:",error);}}
       if(auth.currentUser?.uid!==user?.uid)return;
       updateAccountUI();
+      if(user)subscribeToNotifications(user.uid);
       if(currentPage==="create")loadCreate();
       else if(currentPage==="library")loadLibrary();
       else if(currentPage==="notifications")loadNotifications();

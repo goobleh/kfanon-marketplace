@@ -278,9 +278,10 @@
       const raw=String(value||"").trim();
       if(!raw)return "";
       let url;try{url=new URL(raw);}catch{throw new Error("Enter a valid Spotify track link, or leave the field blank.");}
-      const match=url.hostname==="open.spotify.com"&&url.protocol==="https:"?url.pathname.match(/^\\/track\\/([A-Za-z0-9]{22})\\/?$/):null;
-      if(!match)throw new Error("Use a Spotify track link in the format https://open.spotify.com/track/…");
-      return "https://open.spotify.com/track/"+match[1];
+      const pathParts=url.pathname.split("/").filter(Boolean);
+      const trackId=url.hostname==="open.spotify.com"&&url.protocol==="https:"&&pathParts.length===2&&pathParts[0]==="track"&&/^[A-Za-z0-9]{22}$/.test(pathParts[1])?pathParts[1]:null;
+      if(!trackId)throw new Error("Use a Spotify track link in the format https://open.spotify.com/track/…");
+      return "https://open.spotify.com/track/"+trackId;
     }
     function spotifyButton(value){
       let url="";try{url=normalizeSpotifyTrackUrl(value);}catch{return "";}
